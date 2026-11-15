@@ -61,3 +61,4 @@ namespace QuanLyBanHangDaChiNhanh.DTOs
         public int SoMatHang { get; set; }
     }
 }
+
