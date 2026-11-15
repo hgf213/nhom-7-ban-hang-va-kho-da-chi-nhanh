@@ -1,14 +1,14 @@
 using Microsoft.EntityFrameworkCore;
-using QuanLyBanHang.Data;
-using QuanLyBanHang.Models;
+using QuanLyBanHangDaChiNhanh.Data;
+using QuanLyBanHangDaChiNhanh.Models.Entities;
 
-namespace QuanLyBanHang.Repositories
+namespace QuanLyBanHangDaChiNhanh.Repositories
 {
     public class HoaDonRepository : IHoaDonRepository
     {
-        private readonly AppDbContext _context;
+        private readonly ApplicationDbContext _context;
 
-        public HoaDonRepository(AppDbContext context)
+        public HoaDonRepository(ApplicationDbContext context)
         {
             _context = context;
         }
@@ -16,21 +16,21 @@ namespace QuanLyBanHang.Repositories
         public async Task<HoaDon?> GetByIdAsync(int maHD)
         {
             return await _context.HoaDons
-                .Include(h => h.ChiNhanh)
-                .Include(h => h.NhanVien)
-                .Include(h => h.KhachHang)
-                .Include(h => h.ChiTiets)
-                    .ThenInclude(ct => ct.SanPham)
-                .FirstOrDefaultAsync(h => h.MaHD == maHD);
+                .Include(h => h.MaCnNavigation)
+                .Include(h => h.MaNvNavigation)
+                .Include(h => h.MaKhNavigation)
+                .Include(h => h.CtHoaDons)
+                    .ThenInclude(ct => ct.MaSpNavigation)
+                .FirstOrDefaultAsync(h => h.MaHd == maHD);
         }
 
         public async Task<IEnumerable<HoaDon>> GetAllAsync()
         {
             return await _context.HoaDons
-                .Include(h => h.ChiNhanh)
-                .Include(h => h.NhanVien)
-                .Include(h => h.KhachHang)
-                .Include(h => h.ChiTiets)
+                .Include(h => h.MaCnNavigation)
+                .Include(h => h.MaNvNavigation)
+                .Include(h => h.MaKhNavigation)
+                .Include(h => h.CtHoaDons)
                 .OrderByDescending(h => h.NgayLap)
                 .ToListAsync();
         }
@@ -38,10 +38,10 @@ namespace QuanLyBanHang.Repositories
         public async Task<IEnumerable<HoaDon>> GetByChiNhanhAsync(int maCN)
         {
             return await _context.HoaDons
-                .Include(h => h.NhanVien)
-                .Include(h => h.KhachHang)
-                .Include(h => h.ChiTiets)
-                .Where(h => h.MaCN == maCN)
+                .Include(h => h.MaNvNavigation)
+                .Include(h => h.MaKhNavigation)
+                .Include(h => h.CtHoaDons)
+                .Where(h => h.MaCn == maCN)
                 .OrderByDescending(h => h.NgayLap)
                 .ToListAsync();
         }
@@ -49,10 +49,10 @@ namespace QuanLyBanHang.Repositories
         public async Task<IEnumerable<HoaDon>> GetByKhachHangAsync(int maKH)
         {
             return await _context.HoaDons
-                .Include(h => h.ChiNhanh)
-                .Include(h => h.NhanVien)
-                .Include(h => h.ChiTiets)
-                .Where(h => h.MaKH == maKH)
+                .Include(h => h.MaCnNavigation)
+                .Include(h => h.MaNvNavigation)
+                .Include(h => h.CtHoaDons)
+                .Where(h => h.MaKh == maKH)
                 .OrderByDescending(h => h.NgayLap)
                 .ToListAsync();
         }
@@ -73,14 +73,14 @@ namespace QuanLyBanHang.Repositories
 
         public async Task<bool> ExistsAsync(int maHD)
         {
-            return await _context.HoaDons.AnyAsync(h => h.MaHD == maHD);
+            return await _context.HoaDons.AnyAsync(h => h.MaHd == maHD);
         }
 
         public async Task<CtHoaDon?> GetChiTietAsync(int maHD, int maSP)
         {
             return await _context.CtHoaDons
-                .Include(ct => ct.SanPham)
-                .FirstOrDefaultAsync(ct => ct.MaHD == maHD && ct.MaSP == maSP);
+                .Include(ct => ct.MaSpNavigation)
+                .FirstOrDefaultAsync(ct => ct.MaHd == maHD && ct.MaSp == maSP);
         }
 
         public async Task AddChiTietAsync(CtHoaDon chiTiet)
@@ -98,7 +98,7 @@ namespace QuanLyBanHang.Repositories
         public async Task RemoveChiTietAsync(int maHD, int maSP)
         {
             var entity = await _context.CtHoaDons
-                .FirstOrDefaultAsync(ct => ct.MaHD == maHD && ct.MaSP == maSP);
+                .FirstOrDefaultAsync(ct => ct.MaHd == maHD && ct.MaSp == maSP);
             if (entity != null)
             {
                 _context.CtHoaDons.Remove(entity);

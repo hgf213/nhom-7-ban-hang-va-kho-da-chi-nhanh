@@ -1,19 +1,19 @@
 using Microsoft.EntityFrameworkCore;
-using QuanLyBanHang.Data;
-using QuanLyBanHang.DTOs;
-using QuanLyBanHang.Models;
-using QuanLyBanHang.Repositories;
+using QuanLyBanHangDaChiNhanh.Data;
+using QuanLyBanHangDaChiNhanh.DTOs;
+using QuanLyBanHangDaChiNhanh.Models.Entities;
+using QuanLyBanHangDaChiNhanh.Repositories;
 
-namespace QuanLyBanHang.Services
+namespace QuanLyBanHangDaChiNhanh.Services
 {
     public class BanHangService : IBanHangService
     {
         private readonly IHoaDonRepository _repo;
-        private readonly AppDbContext _context;
+        private readonly ApplicationDbContext _context;
 
-        public BanHangService(IHoaDonRepository repo, AppDbContext context)
+        public BanHangService(IHoaDonRepository repo, ApplicationDbContext context)
         {
-            _repo    = repo;
+            _repo = repo;
             _context = context;
         }
 
@@ -25,32 +25,29 @@ namespace QuanLyBanHang.Services
             var now = DateTime.Now;
 
             var sanPhams = await _context.SanPhams
-                .Include(s => s.DanhMuc)
-                .Where(s => s.TenSP.Contains(keyword))
+                .Include(s => s.MaDmNavigation)
+                .Where(s => s.TenSp.Contains(keyword))
                 .ToListAsync();
 
             var result = new List<SanPhamBanHangDto>();
 
             foreach (var sp in sanPhams)
             {
-                // Lấy tồn kho tại chi nhánh
                 var tonKho = await _context.TonKhos
-                    .FirstOrDefaultAsync(t => t.MaCN == maCN && t.MaSP == sp.MaSP);
+                    .FirstOrDefaultAsync(t => t.MaCn == maCN && t.MaSp == sp.MaSp);
 
                 int soLuongTon = tonKho?.SoLuongTon ?? 0;
 
-                // Kiểm tra khuyến mãi đang chạy cho sản phẩm này
-                var km = await _context.CtKhuyenMais
-                    .Include(c => c.KhuyenMai)
-                    .Where(c => c.MaSP == sp.MaSP
-                             && c.KhuyenMai.TrangThai == "Đang chạy"
-                             && c.KhuyenMai.NgayBatDau <= now
-                             && c.KhuyenMai.NgayKetThuc >= now)
-                    .Select(c => c.KhuyenMai)
-                    .FirstOrDefaultAsync();
+                var km = await _context.KhuyenMais
+                    .Include(k => k.MaSps)
+                    .FirstOrDefaultAsync(k =>
+                        k.MaSps.Any(s => s.MaSp == sp.MaSp)
+                        && k.TrangThai == "Đang chạy"
+                        && k.NgayBatDau <= now
+                        && k.NgayKetThuc >= now);
 
                 decimal giaSauGiam = sp.GiaBan;
-                bool coKhuyenMai   = false;
+                bool coKhuyenMai = false;
 
                 if (km != null)
                 {
@@ -62,7 +59,7 @@ namespace QuanLyBanHang.Services
                             tienGiam = km.GiamToiDa.Value;
                         giaSauGiam = sp.GiaBan - tienGiam;
                     }
-                    else // Số tiền cố định
+                    else
                     {
                         giaSauGiam = sp.GiaBan - km.GiaTriGiam;
                         if (giaSauGiam < 0) giaSauGiam = 0;
@@ -71,14 +68,14 @@ namespace QuanLyBanHang.Services
 
                 result.Add(new SanPhamBanHangDto
                 {
-                    MaSP        = sp.MaSP,
-                    TenSP       = sp.TenSP,
-                    TenDM       = sp.DanhMuc?.TenDM ?? "",
-                    DonViTinh   = sp.DonViTinh ?? "",
-                    GiaBan      = sp.GiaBan,
-                    TonKho      = soLuongTon,
+                    MaSP = sp.MaSp,
+                    TenSP = sp.TenSp,
+                    TenDM = sp.MaDmNavigation?.TenDm ?? "",
+                    DonViTinh = sp.DonViTinh ?? "",
+                    GiaBan = sp.GiaBan,
+                    TonKho = soLuongTon,
                     CoKhuyenMai = coKhuyenMai,
-                    GiaSauGiam  = giaSauGiam
+                    GiaSauGiam = giaSauGiam
                 });
             }
 
@@ -90,26 +87,26 @@ namespace QuanLyBanHang.Services
         // ---------------------------------------------------------------
         public async Task<HoaDonDto> TaoHoaDonAsync(CreateHoaDonDto dto)
         {
-            if (!await _context.ChiNhanhs.AnyAsync(c => c.MaCN == dto.MaCN))
+            if (!await _context.ChiNhanhs.AnyAsync(c => c.MaCn == dto.MaCN))
                 throw new KeyNotFoundException($"Chi nhánh {dto.MaCN} không tồn tại.");
-            if (!await _context.NhanViens.AnyAsync(n => n.MaNV == dto.MaNV))
+            if (!await _context.NhanViens.AnyAsync(n => n.MaNv == dto.MaNV))
                 throw new KeyNotFoundException($"Nhân viên {dto.MaNV} không tồn tại.");
-            if (!await _context.KhachHangs.AnyAsync(k => k.MaKH == dto.MaKH))
+            if (!await _context.KhachHangs.AnyAsync(k => k.MaKh == dto.MaKH))
                 throw new KeyNotFoundException($"Khách hàng {dto.MaKH} không tồn tại.");
 
             var hoaDon = new HoaDon
             {
-                MaCN     = dto.MaCN,
-                MaNV     = dto.MaNV,
-                MaKH     = dto.MaKH,
-                NgayLap  = DateTime.Now,
+                MaCn = dto.MaCN,
+                MaNv = dto.MaNV,
+                MaKh = dto.MaKH,
+                NgayLap = DateTime.Now,
                 TongTien = 0,
                 TongTienGiam = 0,
                 TrangThai = "Chưa thanh toán"
             };
 
             var created = await _repo.AddAsync(hoaDon);
-            var result  = await _repo.GetByIdAsync(created.MaHD);
+            var result = await _repo.GetByIdAsync(created.MaHd);
             return MapToDto(result!);
         }
 
@@ -127,30 +124,28 @@ namespace QuanLyBanHang.Services
             var sanPham = await _context.SanPhams.FindAsync(dto.MaSP)
                 ?? throw new KeyNotFoundException($"Sản phẩm {dto.MaSP} không tồn tại.");
 
-            // Kiểm tra tồn kho tại chi nhánh
             var tonKho = await _context.TonKhos
-                .FirstOrDefaultAsync(t => t.MaCN == hoaDon.MaCN && t.MaSP == dto.MaSP);
+                .FirstOrDefaultAsync(t => t.MaCn == hoaDon.MaCn && t.MaSp == dto.MaSP);
 
             int soLuongHienCo = tonKho?.SoLuongTon ?? 0;
 
-            // Lấy số lượng SP này đã có trong hóa đơn (nếu thêm lại)
             var existing = await _repo.GetChiTietAsync(maHD, dto.MaSP);
             int soLuongDaCoTrongHD = existing?.SoLuong ?? 0;
-            int soLuongCanThem     = dto.SoLuong - soLuongDaCoTrongHD;
+            int soLuongCanThem = dto.SoLuong - soLuongDaCoTrongHD;
 
             if (soLuongHienCo < soLuongCanThem)
                 throw new InvalidOperationException(
                     $"Tồn kho không đủ. Hiện còn {soLuongHienCo}, đã đặt {soLuongDaCoTrongHD}, cần thêm {soLuongCanThem}.");
 
-            // Tính giảm giá nếu có khuyến mãi
             decimal tienGiam = 0;
             if (dto.MaKM.HasValue)
             {
-                var km = await _context.KhuyenMais.FindAsync(dto.MaKM.Value);
+                var km = await _context.KhuyenMais
+                    .Include(k => k.MaSps)
+                    .FirstOrDefaultAsync(k => k.MaKm == dto.MaKM.Value);
                 if (km != null)
                 {
-                    bool spCoTrongKM = await _context.CtKhuyenMais
-                        .AnyAsync(c => c.MaKM == dto.MaKM.Value && c.MaSP == dto.MaSP);
+                    bool spCoTrongKM = km.MaSps.Any(s => s.MaSp == dto.MaSP);
 
                     if (spCoTrongKM)
                     {
@@ -173,8 +168,8 @@ namespace QuanLyBanHang.Services
 
             if (existing != null)
             {
-                existing.SoLuong  = dto.SoLuong;
-                existing.DonGia   = sanPham.GiaBan;
+                existing.SoLuong = dto.SoLuong;
+                existing.DonGia = sanPham.GiaBan;
                 existing.TienGiam = tienGiam;
                 existing.ThanhTien = thanhTien;
                 await _repo.UpdateChiTietAsync(existing);
@@ -183,19 +178,18 @@ namespace QuanLyBanHang.Services
             {
                 await _repo.AddChiTietAsync(new CtHoaDon
                 {
-                    MaHD      = maHD,
-                    MaSP      = dto.MaSP,
-                    SoLuong   = dto.SoLuong,
-                    DonGia    = sanPham.GiaBan,
-                    TienGiam  = tienGiam,
+                    MaHd = maHD,
+                    MaSp = dto.MaSP,
+                    SoLuong = dto.SoLuong,
+                    DonGia = sanPham.GiaBan,
+                    TienGiam = tienGiam,
                     ThanhTien = thanhTien
                 });
             }
 
-            // Cập nhật tổng tiền hóa đơn
-            var allCt = await _context.CtHoaDons.Where(ct => ct.MaHD == maHD).ToListAsync();
-            hoaDon.TongTien     = allCt.Sum(ct => ct.SoLuong * ct.DonGia);
-            hoaDon.TongTienGiam = allCt.Sum(ct => ct.TienGiam);
+            var allCt = await _context.CtHoaDons.Where(ct => ct.MaHd == maHD).ToListAsync();
+            hoaDon.TongTien = allCt.Sum(ct => ct.SoLuong * ct.DonGia);
+            hoaDon.TongTienGiam = allCt.Sum(ct => ct.TienGiam ?? 0);
             await _repo.UpdateAsync(hoaDon);
 
             var result = await _repo.GetByIdAsync(maHD);
@@ -213,26 +207,25 @@ namespace QuanLyBanHang.Services
             if (hoaDon.TrangThai == "Đã thanh toán")
                 throw new InvalidOperationException("Hóa đơn này đã được thanh toán trước đó.");
 
-            if (!hoaDon.ChiTiets.Any())
+            if (!hoaDon.CtHoaDons.Any())
                 throw new InvalidOperationException("Hóa đơn chưa có sản phẩm nào.");
 
-            // Trừ tồn kho
-            foreach (var ct in hoaDon.ChiTiets)
+            foreach (var ct in hoaDon.CtHoaDons)
             {
                 var tonKho = await _context.TonKhos
-                    .FirstOrDefaultAsync(t => t.MaCN == hoaDon.MaCN && t.MaSP == ct.MaSP)
-                    ?? throw new InvalidOperationException($"Không tìm thấy tồn kho sản phẩm {ct.MaSP} tại chi nhánh {hoaDon.MaCN}.");
+                    .FirstOrDefaultAsync(t => t.MaCn == hoaDon.MaCn && t.MaSp == ct.MaSp)
+                    ?? throw new InvalidOperationException($"Không tìm thấy tồn kho sản phẩm {ct.MaSp} tại chi nhánh {hoaDon.MaCn}.");
 
                 if (tonKho.SoLuongTon < ct.SoLuong)
                     throw new InvalidOperationException(
-                        $"Tồn kho sản phẩm '{ct.SanPham?.TenSP}' không đủ (còn {tonKho.SoLuongTon}, cần {ct.SoLuong}).");
+                        $"Tồn kho sản phẩm '{ct.MaSpNavigation?.TenSp}' không đủ (còn {tonKho.SoLuongTon}, cần {ct.SoLuong}).");
 
                 tonKho.SoLuongTon -= ct.SoLuong;
                 _context.TonKhos.Update(tonKho);
             }
 
             hoaDon.PhuongThucThanhToan = dto.PhuongThucThanhToan;
-            hoaDon.TrangThai           = "Đã thanh toán";
+            hoaDon.TrangThai = "Đã thanh toán";
             await _repo.UpdateAsync(hoaDon);
             await _context.SaveChangesAsync();
 
@@ -256,14 +249,14 @@ namespace QuanLyBanHang.Services
             int? maCN, int? maKH, DateTime? tuNgay, DateTime? denNgay)
         {
             var query = _context.HoaDons
-                .Include(h => h.ChiNhanh)
-                .Include(h => h.NhanVien)
-                .Include(h => h.KhachHang)
-                .Include(h => h.ChiTiets)
+                .Include(h => h.MaCnNavigation)
+                .Include(h => h.MaNvNavigation)
+                .Include(h => h.MaKhNavigation)
+                .Include(h => h.CtHoaDons)
                 .AsQueryable();
 
-            if (maCN.HasValue)   query = query.Where(h => h.MaCN == maCN.Value);
-            if (maKH.HasValue)   query = query.Where(h => h.MaKH == maKH.Value);
+            if (maCN.HasValue) query = query.Where(h => h.MaCn == maCN.Value);
+            if (maKH.HasValue) query = query.Where(h => h.MaKh == maKH.Value);
             if (tuNgay.HasValue) query = query.Where(h => h.NgayLap >= tuNgay.Value);
             if (denNgay.HasValue) query = query.Where(h => h.NgayLap <= denNgay.Value.AddDays(1));
 
@@ -271,17 +264,17 @@ namespace QuanLyBanHang.Services
 
             return list.Select(h => new HoaDonSummaryDto
             {
-                MaHD                = h.MaHD,
-                TenCN               = h.ChiNhanh?.TenCN   ?? "",
-                TenNV               = h.NhanVien?.HoTen    ?? "",
-                TenKH               = h.KhachHang?.HoTen   ?? "",
-                NgayLap             = h.NgayLap,
-                TongTien            = h.TongTien,
-                TongTienGiam        = h.TongTienGiam,
-                ThanhToanThucTe     = h.TongTien - h.TongTienGiam,
-                PhuongThucThanhToan = h.PhuongThucThanhToan,
-                TrangThai           = h.TrangThai,
-                SoMatHang           = h.ChiTiets.Count
+                MaHD = h.MaHd,
+                TenCN = h.MaCnNavigation?.TenCn ?? "",
+                TenNV = h.MaNvNavigation?.HoTen ?? "",
+                TenKH = h.MaKhNavigation?.HoTen ?? "",
+                NgayLap = h.NgayLap ?? DateTime.MinValue,
+                TongTien = h.TongTien ?? 0,
+                TongTienGiam = h.TongTienGiam ?? 0,
+                ThanhToanThucTe = (h.TongTien ?? 0) - (h.TongTienGiam ?? 0),
+                PhuongThucThanhToan = h.PhuongThucThanhToan ?? "",
+                TrangThai = h.TrangThai ?? "",
+                SoMatHang = h.CtHoaDons.Count
             });
         }
 
@@ -290,28 +283,28 @@ namespace QuanLyBanHang.Services
         // ---------------------------------------------------------------
         private static HoaDonDto MapToDto(HoaDon h) => new()
         {
-            MaHD                = h.MaHD,
-            MaCN                = h.MaCN,
-            TenCN               = h.ChiNhanh?.TenCN    ?? "",
-            MaNV                = h.MaNV,
-            TenNV               = h.NhanVien?.HoTen     ?? "",
-            MaKH                = h.MaKH,
-            TenKH               = h.KhachHang?.HoTen    ?? "",
-            SdtKH               = h.KhachHang?.SoDienThoai,
-            NgayLap             = h.NgayLap,
-            TongTien            = h.TongTien,
-            TongTienGiam        = h.TongTienGiam,
-            ThanhToanThucTe     = h.TongTien - h.TongTienGiam,
-            PhuongThucThanhToan = h.PhuongThucThanhToan,
-            TrangThai           = h.TrangThai,
-            ChiTiets = h.ChiTiets.Select(ct => new CtHoaDonDto
+            MaHD = h.MaHd,
+            MaCN = h.MaCn,
+            TenCN = h.MaCnNavigation?.TenCn ?? "",
+            MaNV = h.MaNv,
+            TenNV = h.MaNvNavigation?.HoTen ?? "",
+            MaKH = h.MaKh,
+            TenKH = h.MaKhNavigation?.HoTen ?? "",
+            SdtKH = h.MaKhNavigation?.SoDienThoai,
+            NgayLap = h.NgayLap ?? DateTime.MinValue,
+            TongTien = h.TongTien ?? 0,
+            TongTienGiam = h.TongTienGiam ?? 0,
+            ThanhToanThucTe = (h.TongTien ?? 0) - (h.TongTienGiam ?? 0),
+            PhuongThucThanhToan = h.PhuongThucThanhToan ?? "",
+            TrangThai = h.TrangThai ?? "",
+            ChiTiets = h.CtHoaDons.Select(ct => new CtHoaDonDto
             {
-                MaSP      = ct.MaSP,
-                TenSP     = ct.SanPham?.TenSP     ?? "",
-                DonViTinh = ct.SanPham?.DonViTinh ?? "",
-                SoLuong   = ct.SoLuong,
-                DonGia    = ct.DonGia,
-                TienGiam  = ct.TienGiam,
+                MaSP = ct.MaSp,
+                TenSP = ct.MaSpNavigation?.TenSp ?? "",
+                DonViTinh = ct.MaSpNavigation?.DonViTinh ?? "",
+                SoLuong = ct.SoLuong,
+                DonGia = ct.DonGia,
+                TienGiam = ct.TienGiam ?? 0,
                 ThanhTien = ct.ThanhTien
             }).ToList()
         };

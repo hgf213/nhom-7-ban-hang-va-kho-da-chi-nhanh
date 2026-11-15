@@ -1,6 +1,6 @@
-using QuanLyBanHang.Models;
+using QuanLyBanHangDaChiNhanh.Models.Entities;
 
-namespace QuanLyBanHang.Repositories
+namespace QuanLyBanHangDaChiNhanh.Repositories
 {
     public interface IHoaDonRepository
     {

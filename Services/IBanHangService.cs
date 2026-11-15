@@ -1,6 +1,6 @@
-using QuanLyBanHang.DTOs;
+using QuanLyBanHangDaChiNhanh.DTOs;
 
-namespace QuanLyBanHang.Services
+namespace QuanLyBanHangDaChiNhanh.Services
 {
     public interface IBanHangService
     {
